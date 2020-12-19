@@ -23,4 +23,4 @@ You can check if your current map has an AIN via the `ai_show_connect` concmd, w
   * The Source engine tends to saves an empty nodegraph for maps without AI node entities, you can overwrite this empty nodegraph if you like
     (it might be worth double checking you don't already have a valid nodegraph first though via the `ai_show_connect` command)
  
-Each command will print out the next steps to perform in the console for more details
+Each `nav2ain_*` command will print out the next steps to perform in the console for more details
