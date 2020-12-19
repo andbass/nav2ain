@@ -1,6 +1,11 @@
 # nav2ain
 Garrysmod - Converts Source Engine navmeshes into AI node graphs to support HL2 npcs on (almost) every map
 
+If your desired map comes with an AI nodegraph (`.ain` file) or has AI node entities within the map, there's no need to use this, but this addon can be useful
+for maps that don't come bundled with AI nodes, such as maps imported from other Source games.
+
+You can check if your current map has an AIN via the `ai_show_connect` concmd, which renders the links between nodes in the AIN via colored lines.
+
 ## How to use
 1. Generate a navmesh
   * You can use the `nav_generate` command built in to the Source engine
@@ -15,5 +20,7 @@ Garrysmod - Converts Source Engine navmeshes into AI node graphs to support HL2 
   * The nodegraph will be in `$YOUR_GMOD_FOLDER/data/$MAP_NAME.ain.txt`
 4. Copy it to the `maps/graph` folder
   * Be sure to remove the `.txt`
+  * The Source engine tends to saves an empty nodegraph for a map even if it did not include any AI nodes in the map, you can overwrite this empty nodegraph if you like
+    (it might be worth double checking you don't already have a valid nodegraph first though via the `ai_show_connect` command)
  
 Each command will print out the next steps to perform in the console for more details
