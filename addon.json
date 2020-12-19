@@ -1,0 +1,8 @@
+{
+    "title": "Nav Mesh to Node Graph",
+    "type": "ServerContent",
+    "tags": ["build"],
+    "ignore": [
+        "*.git*"
+    ]
+}
