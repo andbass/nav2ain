@@ -84,6 +84,12 @@ local Capability = enum {
     SimpleRadiusDamage = 0x80000000, -- do not use robust radius damage model on this character.
 }
 
+local LoadStatus = {
+    NoAinFile = 0,
+    Fail = 1,
+    Success = 2,
+}
+
 local numHulls = 10
 local ainVersionNumber = 37
 local maxNodes = 1500
@@ -96,7 +102,7 @@ local humanHull = {
     maxs = Vector(13, 13, 72),
 }
 
-function Graph:New(path)
+function Graph.New(cls, path)
     file.CreateDir("nodegraphs")
 
     local path = path or string.format("maps/graphs/%s.ain", game.GetMap())
@@ -118,6 +124,10 @@ setmetatable(Graph, { __call = Graph.New })
 
 function Graph:Load()
     local ainFp = file.Open(self.path, "rb", "GAME")
+    if ainFp == nil then
+        MsgE("Failed to open nodegraph %s", self.path)    
+        return LoadStatus.NoAinFile
+    end
 
     self.version = ainFp:ReadLong()
     self.mapVersion = ainFp:ReadLong()
@@ -160,6 +170,7 @@ function Graph:Load()
     end
 
     ainFp:Close()
+    return LoadStatus.Success
 end
 
 function Graph:Save()
@@ -338,6 +349,10 @@ function Graph:NeighborsFor(node)
     return pairs(self.neighbors[node] or {})
 end
 
+function Graph:NeighborsList(node)
+    return table.GetKeys(self.neighbors[node] or {})
+end
+
 function Graph:AreOneWayLinked(a, b)
     return self.neighbors[a] ~= nil and self.neighbors[a][b] ~= nil
 end
@@ -397,23 +412,25 @@ function Graph:ConvertNavmesh(options)
         end
     end
 
-    if #spawnEnts == 0 then
-        MsgE("Could not find any valid spawn positions")
-        return
-    end
-
     local seedPositions = options.additionalSeedPositions or {}
     for i, spawnEnt in ipairs(spawnEnts) do
         table.insert(seedPositions, spawnEnt:GetPos())
     end
 
+    if #seedPositions == 0 then
+        MsgE("Could not find any valid seed positions")
+        return
+    end
+
     local spawnAreas = {}
     for i, pos in ipairs(seedPositions) do
         local area = navmesh.GetNearestNavArea(pos)
-        local id = area:GetID()
-        
-        if id then -- some NavAreas don't have IDs, for whatever reason
-            spawnAreas[id] = area -- don't want duplicates, hence why using ID as key rather than just using `table.insert`
+        if area:IsValid() then
+            local id = area:GetID()
+            
+            if id then -- some NavAreas don't have IDs, for whatever reason
+                spawnAreas[id] = area -- don't want duplicates, hence why using ID as key rather than just using `table.insert`
+            end
         end
     end
 
@@ -422,12 +439,17 @@ function Graph:ConvertNavmesh(options)
     end
 
     if options.simplify then
+        MsgF("Before simplifying, we have %s nodes", #self.nodes)
         self:Simplify(options.simplificationMaxDist)
 
         if #self.nodes > maxNodes then
-            MsgF("Needs additional simplification")
+            MsgF("Needs additional simplification, still have %s nodes, greater than max of %s", #self.nodes, maxNodes)
             self:Simplify(options.simplificationMaxDist * 2.5)
         end
+    end
+
+    if #self.nodes > maxNodes then
+        MsgE("We still have %s nodes which is greater than the engine max of %s, your nodegraph won't load correctly :(. Try with simplification on?", #self.nodes, maxNodes)
     end
 end
 
@@ -440,7 +462,7 @@ local function AreNavAreasWalkable(area1, area2)
     end
 
     local closeEnoughCorners = 0
-    local allowedDiff = 10
+    local allowedDiff = 20
 
     if area1:HasAttributes(NAV_MESH_STAIRS) or area2:HasAttributes(NAV_MESH_STAIRS) then
         allowedDiff = 40
@@ -452,7 +474,7 @@ local function AreNavAreasWalkable(area1, area2)
             local corner2 = area2:GetCorner(j)
 
             local diff = math.abs(corner1.z - corner2.z)
-            if diff < allowedDiff and i ~= j then
+            if diff < allowedDiff then
                 closeEnoughCorners = closeEnoughCorners + 1
             end
         end
@@ -467,6 +489,10 @@ local isEntOkInHullTrace = {
 }
 
 local function IsNavAreaStandable(area)
+    if area:IsUnderwater() then
+        return false
+    end
+
     local tr = util.TraceHull {
         start = area:GetCenter(),
         endpos = area:GetCenter(),
@@ -569,6 +595,7 @@ end
 
 return {
     Graph = Graph,
+    LoadStatus = LoadStatus,
 
     Type = Type,
     Zone = Zone,

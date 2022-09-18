@@ -10,11 +10,28 @@ local function ReverseEnumLookup(tbl, value)
 end
 
 function enum(tbl)
-    setmetatable(tbl, {
+    return setmetatable(tbl, {
         __index = ReverseEnumLookup
     })
+end
 
-    return tbl
+function class()
+    local classTbl = {
+        Init = function() end
+    }
+
+    local function constructor(classTbl, ...)
+        local self = setmetatable({}, {
+            __index = classTbl
+        })
+
+        self:Init(...)
+        return self
+    end
+
+    return setmetatable(classTbl, {
+        __call = constructor
+    })
 end
 
 function MsgF(fmt, ...)
@@ -22,7 +39,22 @@ function MsgF(fmt, ...)
 end
 
 local colorErr = Color(200, 25, 0)
-
 function MsgE(fmt, ...)
     MsgC(colorErr, string.format(fmt, ...) .. "\n")
+end
+
+function table.All(xs, pred)
+    for k, v in pairs(xs) do
+        if not pred(k, v) then return false end
+    end
+
+    return true
+end
+
+function table.Any(xs, pred)
+    for k, v in pairs(xs) do
+        if pred(k, v) then return true end
+    end
+
+    return false
 end

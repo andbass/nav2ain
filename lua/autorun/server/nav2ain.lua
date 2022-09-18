@@ -18,8 +18,8 @@ local function Convert(ply, cmd, args, str)
 
     local graph = nodegraph.Graph()
     graph:ConvertNavmesh { 
-        simplify = true,
-        simplificationMaxDist = 150,
+        simplify = cvars.SimplifyNodeGraph:GetBool(),
+        simplificationMaxDist = cvars.SimplifyMaxDist:GetFloat(),
         spawnEntName = args[1],
         additionalSeedPositions = additionalSeedPositions
     }
@@ -61,8 +61,12 @@ local function Load(ply, cmd, args, str)
     graph:Load()
     MsgN("Loading complete")
 
+    MsgN()
     MsgF("# Nodes = %s, # Links = %s", #graph.nodes, #graph:Links())
+    MsgN()
     MsgF("AIN Version = %s, Map Version = %s", graph.version, graph.mapVersion)
+    MsgF("Map Version in BSP = %s (AIN Match = %s)", game.GetMapVersion(), graph.mapVersion == game.GetMapVersion())
+    MsgN()
 
     MsgN("Drawing nodes and links")
     graph:Draw(ply, drawRate)
