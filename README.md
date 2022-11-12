@@ -8,7 +8,7 @@ You can check if your current map has an AIN via the `ai_show_connect` concmd, w
 
 ## How to use
 1. Generate a navmesh
-  * You can use the `nav_generate` command built in to the Source engine
+  * You can use the `nav_generate` command included with Garrysmod
   * This step is skipable if your map comes with a built in navmesh (CS maps tend to)
   * To check, use the `nav_edit 1` concmd
 2. Convert it to an AI nodegraph (AIN)
