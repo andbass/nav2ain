@@ -17,7 +17,7 @@ function sampler.UniformNumber(params)
             end
         end
 
-        delta = params.max - params.min
+        local delta = params.max - params.min
         return function()
             return params.min + delta * math.random()
         end
@@ -41,7 +41,7 @@ function sampler.Choice(params)
 
     if not isValidWeightedChoiceParam then
         local isValidUniformDistrib = table.All(params, function(idx, param)
-            return type(idx) == "number" and type(param) ~= "table"
+            return type(idx) == "number"
         end)
 
         if not isValidUniformDistrib then
@@ -89,6 +89,14 @@ function sampler.Table(tbl)
 
         return instance
     end
+end
+
+function sampler.Eval(value)
+    if type(value) == "function" then
+        return value()
+    end
+
+    return value
 end
 
 return sampler

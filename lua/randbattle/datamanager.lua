@@ -88,7 +88,7 @@ end
 function dataManager.CallModifier(modifierType, ...)
     for modifierName, modifier in pairs(dataManager.activeModifiers) do
         if modifier[modifierType] then
-            local result = modifier[modifierType](...)
+            local result = sampler.Eval(modifier[modifierType](...))
             if result ~= nil then
                 return result
             end

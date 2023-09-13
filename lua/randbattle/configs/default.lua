@@ -145,5 +145,18 @@ return {
                 }
             }
         }
+    },
+
+    itemboxes = {
+        dynamic = sampler.Table {
+            item = "item_dynamic_resupply",
+            count = sampler.UniformInt { min = 1, max = 3 },
+
+            keyValues = sampler.Table {
+                DesiredAmmoAR2 = sampler.UniformNumber { min = 0.33, max = 1.0 },
+                DesiredAmmoBuckshot = sampler.UniformNumber { min = 0.5, max = 1.0 },
+                DesiredAmmo357 = sampler.UniformNumber { min = 0.35, max = 1.0 },
+            },
+        }
     }
 }

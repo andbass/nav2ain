@@ -4,6 +4,7 @@ include "nav2ain/util.lua"
 local dataManager = include "randbattle/datamanager.lua"
 local sampler = include "randbattle/sampler.lua"
 local spawner = include "randbattle/spawner.lua"
+local cvar = include "randbattle/cvars.lua"
 
 local function ListScenarios(ply, cmd, args, str)
     MsgF("Listing all available scenarios from loaded configs:")
@@ -29,10 +30,10 @@ local function ActivateModifiers(ply, cmd, args, str)
 end
 
 local function Start(ply, cmd, args, str)
+
 end
 
 local function Stop(ply, cmd, args, str)
-
 
 end
 
@@ -60,6 +61,22 @@ local function Burst(ply, cmd, args, str)
                 exhaustedSides[side] = true
             end
         end
+    end
+
+    local exhaustedItems = false
+    while not exhaustedItems do
+        local couldSpawn = spawner.SpawnRandomItem()
+        if not couldSpawn then
+            exhaustedItems = true
+        end
+    end
+
+    local initialItems = cvar.InitialItems:GetInt() 
+    for i = 1, initialItems do
+        local pos = ply:GetPos() + ply:GetForward() * 100  + ply:GetUp() * 40 * i
+        spawner.InstantiateItem("dynamic", {
+            pos = pos
+        })
     end
 
     return true
@@ -135,6 +152,20 @@ hook.Add("InitPostEntity", "randbattle_Initialize", function()
     end)
 end)
 
+local function Init(ply, cmd, args, str)
+    dataManager.ready = false
+    spawner.ready = false
+
+    dataManager.Init()
+    spawner.Init(dataManager)
+end
+
+local function ConfigReload(ply, cmd, args, str)
+    dataManager.LoadConfigs()
+end
+
+concommand.Add("randbattle_init", Init, nil, "TODO")
+concommand.Add("randbattle_config_reload", ConfigReload, nil, "TODO")
 concommand.Add("randbattle_scenarios", ListScenarios, nil, "TODO")
 concommand.Add("randbattle_modifiers", ListOrActivateModifiers, nil, "TODO")
 concommand.Add("randbattle_set_modifiers", ActivateModifiers, nil, "TODO")

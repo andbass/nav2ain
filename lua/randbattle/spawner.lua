@@ -14,18 +14,26 @@ function spawner.Init(dataManager)
     spawner.graph:Load()
 
     if #spawner.graph.nodes == 0 or #spawner.graph:Links() == 0 then
-        MsgE("Loaded nodegraph has no nodes or links - need to generate one")
+        PrintMessage(HUD_PRINTTALK, "RANDBATTLE ERROR: Loaded nodegraph has no nodes or links - need to generate or make one")
         return false
     end
 
     spawner.FindHidingSpots()
+    if #spawner.hidingSpots == 0 then
+        PrintMessage(HUD_PRINTTALK, "RANDBATTLE WARNING: No hiding spots were present in navmesh - maybe need to generate or make one (see `nav_generate` concommand). Items will NOT spawn")
+    end
+
     spawner.MakeRandomNodeFunc()
+    spawner.MakeRandomHidingSpotFunc()
 
     spawner.nextSquadIdx = 0
 
     spawner.spawnedSquads = {}
     spawner.spawnCount = {}
     spawner.squadRepresentativeNpcs = {}
+
+    spawner.spawnedItems = {}
+    spawner.nextItemId = 0
 
     spawner.ready = true
 end
@@ -66,12 +74,29 @@ function spawner.MakeRandomNodeFunc()
     spawner.RandomNode = sampler.Choice(choices)
 end
 
+function spawner.MakeRandomHidingSpotFunc()
+    -- Maybe someday this is more complicated
+    if #spawner.hidingSpots > 0 then
+        spawner.RandomHidingSpot = sampler.Choice(spawner.hidingSpots)
+    else
+        spawner.RandomHidingSpot = function()
+            return nil
+        end
+    end
+end
+
 spawner.knownModels = {
     elite  = "models/combine_super_soldier.mdl",
 }
 
 function spawner.OverrideWeapon(weapon)
     return spawner.dataManager.CallModifier("overrideWeapon", weapon) or weapon
+end
+
+function spawner.ApplyKeyValues(ent, keyValues)
+    for key, value in pairs(keyValues or {}) do
+        ent:SetKeyValue(key, value)
+    end
 end
 
 function spawner.InstantiateArchetype(archetypeDef, options)
@@ -83,7 +108,7 @@ function spawner.InstantiateArchetype(archetypeDef, options)
         patrol = false,
     })
 
-    local archetype = archetypeDef()
+    local archetype = sampler.Eval(archetypeDef)
     local npc = ents.Create(archetype.npc)
 
     if not IsValid(npc) then
@@ -150,7 +175,7 @@ function spawner.InstantiateArchetype(archetypeDef, options)
 
     if options.squad ~= nil then
         npc.squad = options.squad
-        npc:SetKeyValue("squadname", options.squad)
+        npc:Fire("SetSquad", options.squad, 0.5)
     end
 
     npc:SetPos(options.pos)
@@ -168,6 +193,10 @@ function spawner.InstantiateArchetype(archetypeDef, options)
 
     npc:Spawn()
     npc:Activate()
+
+    npc:SetMaxHealth(npc:GetMaxHealth() * cvars.HealthScale:GetFloat())
+    npc:SetHealth(npc:Health() * cvars.HealthScale:GetFloat())
+
     return npc
 end
 
@@ -182,7 +211,7 @@ function spawner.InstantiateSquad(sideName, squadDef, options)
     local config = spawner.dataManager.activeConfig
 
     local squadName = spawner.NextSquadName(sideName)
-    local squad = squadDef()
+    local squad = sampler.Eval(squadDef)
 
     local node = options.node
     local neighbors = spawner.graph:NeighborsList(node)
@@ -237,7 +266,7 @@ function spawner.SpawnRandomSquad(sideName, options)
     local scenario  = spawner.dataManager.activeScenario
 
     local sideDef = scenario.sides[sideName]
-    local side = sideDef()
+    local side = sampler.Eval(sideDef)
 
     local limit = (cvars.SideLimit:GetInt() > 0) and cvars.SideLimit:GetInt() or side.maxNpcs
     if (spawner.spawnCount[sideName] or 0) > limit then
@@ -276,7 +305,8 @@ function spawner.GetSquadSpawnPoint(sideName, side, options)
 
     local limit = 10000 -- TODO convar prolly
 
-    local minPlayerDistSqr = Sqr(side.minPlayerDist or 0.0)
+    local minPlayerDistCvar = cvars.MinPlayerDist:GetInt()
+    local minPlayerDistSqr = Sqr((minPlayerDistCvar > 0) and minPlayerDistCvar or side.minPlayerDist or 0.0)
     local maxPlayerDistSqr = Sqr(side.maxPlayerDist or math.huge)
 
     local minEnemyDistSqr = Sqr(side.minEnemyDist or 0.0)
@@ -317,13 +347,95 @@ function spawner.GetSquadSpawnPoint(sideName, side, options)
             end
 
             if npcRangeOk then
-                MsgF("Found node after %s iterations", i)
+                --MsgF("Found node after %s iterations", i)
                 return node 
             end
         end
     end
 
-    MsgE("Warning: failed to find node for side %s with limit %s", sideName, limit)
+    MsgF("Warning: failed to find node for side %s with retry limit %s", sideName, limit)
+    return nil
+end
+
+function spawner.InstantiateItem(itemName, options)
+    options = table.Inherit(options or {}, {
+        pos = Vector(0, 0, 0)
+    })
+
+    local config = spawner.dataManager.activeConfig
+    local itemboxInfo = sampler.Eval(config.itemboxes[itemName])
+
+    local itemboxId = spawner.nextItemId
+    spawner.nextItemId = spawner.nextItemId + 1
+
+    local itembox = ents.Create("item_item_crate")
+    itembox.itemId = itemboxId
+    
+    itembox:SetPos(options.pos)
+    itembox:SetKeyValue("ItemClass", itemboxInfo.item)
+    itembox:SetKeyValue("ItemCount", itemboxInfo.count)
+
+    spawner.ApplyKeyValues(itembox, itemboxInfo.keyValues)
+
+    itembox:CallOnRemove("randbattle_OnRemove", spawner.OnRemoveItem)
+
+    itembox:Spawn()
+    itembox:Activate()
+
+    spawner.spawnedItems[itemboxId] = itembox
+    return itembox
+end
+
+function spawner.SpawnRandomItem(options)
+    options = table.Inherit(options or {}, {
+        -- TODO what do we need? 
+    })
+
+    local config = spawner.dataManager.activeConfig
+
+    local spawnPoint = spawner.GetItemSpawnPoint()
+    if spawnPoint == nil then
+        MsgF("Managed to spawn in %s items before running out of acceptable hiding spots", table.Count(spawner.spawnedItems))
+        return false
+    end
+
+    local _, itemName = table.Random(config.itemboxes)
+    spawner.InstantiateItem(itemName, {
+        pos = spawnPoint,
+    })
+    
+    return true
+end
+
+function spawner.GetItemSpawnPoint(options)
+    options = table.Inherit(options or {}, {
+        -- TODO what do we need? 
+    })
+
+    local minItemDistSqr = Sqr(cvars.ItemMinDist:GetInt())
+    local limit = 10000 -- TODO convar prolly
+
+    for i = 1, limit do
+        local hidingSpot = spawner.RandomHidingSpot()
+        if hidingSpot == nil then
+            return nil
+        end
+
+        local distCheckOkay = true
+        for otherId, otherItem in pairs(spawner.spawnedItems) do
+            local distSqr = (otherItem:GetPos() - hidingSpot):LengthSqr()
+            if distSqr < minItemDistSqr then
+                distCheckOkay = false
+                break
+            end
+        end
+
+        if distCheckOkay then
+            return hidingSpot
+        end
+    end
+
+    MsgF("Warning: failed to find hiding spot for item after %s iterations, bailing", limit)
     return nil
 end
 
@@ -366,6 +478,10 @@ function spawner.OnRemove(npc)
     if npc.squad ~= nil  then
         spawner.spawnedSquads[npc.squad][npc] = nil
     end
+end
+
+function spawner.OnRemoveItem(item)
+    spawner.spawnedItems[item.itemId] = nil
 end
 
 spawner.debug = {
